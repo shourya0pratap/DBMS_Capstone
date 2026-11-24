@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FinCore DB — DBMS Capstone</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --accent: #38bdf8; --green: #22c55e; --red: #ef4444; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1.5rem; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    h1 { margin: 0; font-size: 1.4rem; }
+    .role-box select { background: var(--card); color: var(--text); border: 1px solid var(--accent); padding: 6px 10px; border-radius: 6px; }
+    .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .kpi { background: var(--card); border: 1px solid var(--border); padding: 1rem; border-radius: 8px; }
+    .kpi small { color: var(--muted); text-transform: uppercase; font-size: 0.75rem; }
+    .kpi div { font-size: 1.6rem; font-weight: 700; margin-top: 4px; color: var(--accent); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 1.2rem; }
+    .tab-btn { background: var(--card); color: var(--muted); border: 1px solid var(--border); padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .tab-btn.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .card { background: var(--card); border: 1px solid var(--border); padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; }
+    .card h3 { margin-top: 0; font-size: 1rem; color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 0.5rem; }
+    th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    input, select { background: #0f172a; color: var(--text); border: 1px solid var(--border); padding: 7px 10px; border-radius: 5px; margin: 4px 4px 4px 0; }
+    button { background: var(--accent); color: #0f172a; border: none; padding: 7px 12px; border-radius: 5px; font-weight: 600; cursor: pointer; margin: 4px 4px 4px 0; }
+    button.secondary { background: #334155; color: var(--text); }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
+    .PLATINUM { background: #a855f733; color: #c084fc; }
+    .GOLD { background: #eab30833; color: #facc15; }
+    .STANDARD { background: #64748b33; color: #cbd5e1; }
+    .toast { padding: 10px; border-radius: 6px; margin-bottom: 1rem; display: none; font-weight: 500; }
+    .toast.ok { background: #22c55e22; border: 1px solid var(--green); color: #86efac; }
+    .toast.err { background: #ef444422; border: 1px solid var(--red); color: #fca5a5; }
+    pre { background: #0f172a; padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; color: #a5f3fc; border: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>FinCore DB — Banking DBMS Capstone</h1>
+      <small style="color: var(--muted)">SQLite • Unit 2 (SQL) • Unit 3 (ACID, Locking, Triggers, RBAC) • Unit 4 (B-Tree & Query Plans)</small>
+    </div>
+    <div class="role-box">
+      <label style="color: var(--muted); font-size: 0.85rem;">Active RBAC Role: </label>
+      <select id="roleSelect">
+        <option value="manager">Manager (Full Access)</option>
+        <option value="teller">Teller (Transfer / Deposit / Withdraw)</option>
+        <option value="auditor">Auditor (Read-Only)</option>
+      </select>
+    </div>
+  </header>
+
+  <div id="toast" class="toast"></div>
+
+  <div class="kpis">
+    <div class="kpi"><small>Total Bank Liquidity</small><div id="kpiLiquidity">₹0</div></div>
+    <div class="kpi"><small>Active Accounts</small><div id="kpiAccounts">0</div></div>
+    <div class="kpi"><small>Total Transactions</small><div id="kpiTxs">0</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('banking', this)">1. Core Banking & ACID</button>
+    <button class="tab-btn" onclick="switchTab('unit2', this)">2. Unit 2 SQL Explorer</button>
+    <button class="tab-btn" onclick="switchTab('security', this)">3. Security, Audits & Optimizer</button>
+  </div>
+
+  <!-- TAB 1: CORE BANKING -->
+  <div id="banking" class="tab-content active">
+    <div class="card">
+      <h3>Accounts (JOIN + Custom SQL Tier Function + Optimistic Version)</h3>
+      <table id="accountsTable">
+        <thead><tr><th>ID</th><th>Account #</th><th>Customer</th><th>Type</th><th>Balance</th><th>Ver</th><th>Tier</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div style="margin-top: 10px;">
+        <button onclick="applyInterest()">Apply 4% Savings Interest (Cursor)</button>
+        <button class="secondary" onclick="demoSavepoint()">Run Savepoint Partial-Rollback Demo (TCL)</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Atomic Fund Transfer (Pessimistic + Optimistic Lock)</h3>
+        <input id="fromId" type="number" placeholder="From ID (e.g. 1)" style="width: 120px;">
+        <input id="toId" type="number" placeholder="To ID (e.g. 2)" style="width: 120px;">
+        <input id="amount" type="number" placeholder="Amount" style="width: 110px;">
+        <button onclick="transfer()">Transfer</button>
+      </div>
+
+      <div class="card">
+        <h3>Deposit / Withdraw (Tests CHECK balance &ge; 0)</h3>
+        <input id="dwAccId" type="number" placeholder="Acc ID (e.g. 1)" style="width: 120px;">
+        <input id="dwAmount" type="number" placeholder="Amount" style="width: 110px;">
+        <select id="dwAction"><option value="DEPOSIT">DEPOSIT</option><option value="WITHDRAWAL">WITHDRAWAL</option></select>
+        <button onclick="depositWithdraw()">Execute</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Recent Transaction Ledger</h3>
+      <table id="txTable">
+        <thead><tr><th>TX ID</th><th>From</th><th>To</th><th>Amount</th><th>Type</th><th>Timestamp</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB 2: UNIT 2 SQL EXPLORER -->
+  <div id="unit2" class="tab-content">
+    <div class="card">
+      <h3>Interactive Unit 2 Query Runner</h3>
+      <div>
+        <button class="secondary" onclick="runUnit2('inner_join')">INNER JOIN</button>
+        <button class="secondary" onclick="runUnit2('outer_join')">LEFT OUTER JOIN</button>
+        <button class="secondary" onclick="runUnit2('self_join')">SELF JOIN (Referrals)</button>
+        <button class="secondary" onclick="runUnit2('subquery')">SUBQUERY</button>
+        <button class="secondary" onclick="runUnit2('set_op')">SET OP (EXCEPT)</button>
+        <button class="secondary" onclick="runUnit2('view')">VIEW</button>
+        <button class="secondary" onclick="runUnit2('cte_window')">CTE + WINDOW FN</button>
+      </div>
+      <h4 id="u2Title" style="margin: 1rem 0 0.5rem;">Select a query above to inspect SQL & live results</h4>
+      <pre id="u2Sql">-- SQL will appear here</pre>
+      <table id="u2Table"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <!-- TAB 3: SECURITY, AUDITS & OPTIMIZER -->
+  <div id="security" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <h3>SQL Injection Prevention (Parameterized Query)</h3>
+        <p style="font-size: 0.85rem; color: var(--muted);">Try entering <code>ACC1001</code> vs <code>' OR '1'='1</code></p>
+        <input id="searchAcc" type="text" placeholder="Account Number" style="width: 220px;">
+        <button onclick="searchAcc()">Safe Search</button>
+        <pre id="searchResult">[]</pre>
+      </div>
+
+      <div class="card">
+        <h3>Unit 4: Query Optimizer (EXPLAIN QUERY PLAN)</h3>
+        <button onclick="runExplain('indexed')">Indexed Lookup (account_number)</button>
+        <button class="secondary" onclick="runExplain('scan')">Full Table Scan (balance)</button>
+        <pre id="explainBox">Click a button to compare SEARCH USING INDEX vs SCAN</pre>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Trigger Audit Logs (Auto-populated by trg_audit_balance)</h3>
+      <table id="auditTable">
+        <thead><tr><th>Log ID</th><th>Account ID</th><th>Old Balance</th><th>New Balance</th><th>Changed At</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const getRole = () => document.getElementById('roleSelect').value;
+
+  function showToast(msg, isError = false) {
+    const t = document.getElementById('toast');
+    t.innerText = msg;
+    t.className = 'toast ' + (isError ? 'err' : 'ok');
+    t.style.display = 'block';
+    setTimeout(() => t.style.display = 'none', 4500);
+  }
+
+  function switchTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  async function loadDashboard() {
+    const data = await (await fetch('/api/dashboard')).json();
+    document.getElementById('kpiLiquidity').innerText = '₹' + data.stats.total_liquidity.toLocaleString();
+    document.getElementById('kpiAccounts').innerText = data.stats.total_accounts;
+    document.getElementById('kpiTxs').innerText = data.stats.total_transactions;
+
+    document.querySelector('#accountsTable tbody').innerHTML = data.accounts.map(a =>
+      `<tr><td>${a.account_id}</td><td><b>${a.account_number}</b></td><td>${a.full_name}</td>
+       <td>${a.account_type}</td><td>₹${a.balance.toLocaleString()}</td><td>v${a.version}</td>
+       <td><span class="badge ${a.tier}">${a.tier}</span></td></tr>`
+    ).join('');
+
+    document.querySelector('#txTable tbody').innerHTML = data.transactions.map(t =>
+      `<tr><td>#${t.tx_id}</td><td>${t.from_acc}</td><td>${t.to_acc}</td>
+       <td>₹${t.amount.toLocaleString()}</td><td>${t.tx_type}</td><td>${t.tx_date}</td></tr>`
+    ).join('');
+
+    document.querySelector('#auditTable tbody').innerHTML = data.audits.map(l =>
+      `<tr><td>#${l.log_id}</td><td>Acc ${l.account_id}</td><td>₹${l.old_balance}</td>
+       <td>₹${l.new_balance}</td><td>${l.changed_at}</td></tr>`
+    ).join('');
+  }
+
+  async function postAction(url, body = {}) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Role': getRole()},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    showToast(data.status || data.error, !res.ok);
+    loadDashboard();
+  }
+
+  const transfer = () => postAction('/api/transfer', {
+    from_id: document.getElementById('fromId').value,
+    to_id: document.getElementById('toId').value,
+    amount: document.getElementById('amount').value
+  });
+
+  const depositWithdraw = () => postAction('/api/deposit-withdraw', {
+    account_id: document.getElementById('dwAccId').value,
+    amount: document.getElementById('dwAmount').value,
+    action: document.getElementById('dwAction').value
+  });
+
+  const applyInterest = () => postAction('/api/apply-interest');
+  const demoSavepoint = () => postAction('/api/demo-savepoint');
+
+  async function runUnit2(key) {
+    const data = await (await fetch(`/api/unit2/${key}`)).json();
+    document.getElementById('u2Title').innerText = data.title;
+    document.getElementById('u2Sql').innerText = data.sql;
+    document.querySelector('#u2Table thead').innerHTML = '<tr>' + data.columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
+    document.querySelector('#u2Table tbody').innerHTML = data.rows.map(r =>
+      '<tr>' + data.columns.map(c => `<td>${r[c]}</td>`).join('') + '</tr>'
+    ).join('');
+  }
+
+  async function searchAcc() {
+    const q = encodeURIComponent(document.getElementById('searchAcc').value);
+    const data = await (await fetch(`/api/search?acc=${q}`)).json();
+    document.getElementById('searchResult').innerText = JSON.stringify(data, null, 2);
+  }
+
+  async function runExplain(mode) {
+    const data = await (await fetch(`/api/explain/${mode}`)).json();
+    document.getElementById('explainBox').innerText = `SQL:\n${data.sql}\n\nPLAN:\n` + JSON.stringify(data.plan, null, 2);
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>
